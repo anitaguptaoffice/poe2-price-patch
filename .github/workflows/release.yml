@@ -44,12 +44,10 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact: poe2-price-patcher-windows-x64
             gui_artifact: poe2-price-patcher-gui-windows-x64
             exe: poe2-price-patcher.exe
             ooz: ooz.exe
           - os: macos-14
-            artifact: poe2-price-patcher-macos-arm64
             gui_artifact: poe2-price-patcher-gui-macos-arm64
             exe: poe2-price-patcher
             ooz: ooz
@@ -119,17 +117,6 @@ jobs:
             --add-binary "${{ steps.ooz.outputs.path }}:." \
             core/build_patch.py
 
-      - name: Package
-        shell: bash
-        run: |
-          mkdir -p "release/${{ matrix.artifact }}"
-          cp "dist/${{ matrix.exe }}" "release/${{ matrix.artifact }}/"
-          cp core/prices.example.json "release/${{ matrix.artifact }}/"
-          cp core/resource_map.json "release/${{ matrix.artifact }}/"
-          cp README.md "release/${{ matrix.artifact }}/"
-          cd release
-          python -m zipfile -c "../${{ matrix.artifact }}.zip" "${{ matrix.artifact }}"
-
       - name: Prepare GUI core
         shell: bash
         run: |
@@ -158,11 +145,6 @@ jobs:
             cd gui-release
             python -m zipfile -c "../${{ matrix.gui_artifact }}.zip" "${{ matrix.gui_artifact }}"
           fi
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}.zip
 
       - uses: actions/upload-artifact@v4
         with:

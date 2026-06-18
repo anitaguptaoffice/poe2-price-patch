@@ -481,6 +481,7 @@ def main():
         fail("provide --prices or --fetch-prices")
 
     platform.system = lambda: "Linux"
+    os.environ["HOME"] = os.environ.get("HOME") or os.path.expanduser("~") or os.environ.get("USERPROFILE", str(Path.home()))
     from PyPoE.poe.file import bundle as bm
 
     install_pypoe_decompress_patch(bm)
