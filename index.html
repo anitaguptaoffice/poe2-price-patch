@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>POE2 价格名字补丁</title>
+  </head>
+  <body>
+    <main id="app">
+      <section class="toolbar">
+        <div>
+          <h1>POE2 价格名字补丁</h1>
+          <p>选择 Bundles2 目录，拉取价格，生成 PricePatch.bundle.bin 和新的 _.index.bin。</p>
+        </div>
+        <button id="run-btn">生成补丁</button>
+      </section>
+
+      <section class="panel">
+        <label>
+          <span>Bundles2 目录</span>
+          <div class="path-row">
+            <input id="bundles2" placeholder="/path/to/Bundles2" />
+            <button class="secondary" data-pick="bundles2">选择</button>
+          </div>
+        </label>
+
+        <label>
+          <span>输出目录</span>
+          <div class="path-row">
+            <input id="outdir" placeholder="/path/to/output" />
+            <button class="secondary" data-pick="outdir">选择</button>
+          </div>
+        </label>
+      </section>
+
+      <section class="grid">
+        <label>
+          <span>价格来源</span>
+          <select id="mode">
+            <option value="fetch">poecurrency.top</option>
+            <option value="local">本地 prices.json</option>
+          </select>
+        </label>
+        <label>
+          <span>prices.json</span>
+          <div class="path-row compact">
+            <input id="prices" placeholder="仅本地模式需要" />
+            <button class="secondary" data-pick-file="prices">选择</button>
+          </div>
+        </label>
+        <label>
+          <span>hours</span>
+          <input id="hours" type="number" min="1" value="1" />
+        </label>
+        <label>
+          <span>价格字段</span>
+          <select id="price-field">
+            <option value="sell1">sell1</option>
+            <option value="buy1">buy1</option>
+            <option value="sell2">sell2</option>
+            <option value="buy2">buy2</option>
+          </select>
+        </label>
+        <label>
+          <span>并发</span>
+          <input id="workers" type="number" min="1" max="32" value="8" />
+        </label>
+        <label>
+          <span>赛季</span>
+          <input id="season" placeholder="留空使用默认" />
+        </label>
+      </section>
+
+      <section class="status">
+        <div id="summary">未运行</div>
+        <button id="open-output" class="secondary" disabled>打开输出目录</button>
+      </section>
+
+      <section class="log-panel">
+        <pre id="log"></pre>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

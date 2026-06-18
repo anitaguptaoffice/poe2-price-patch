@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "POE2 Price Patcher",
+  "version": "0.1.0",
+  "identifier": "local.poe2.price.patcher",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "POE2 价格名字补丁",
+        "width": 1120,
+        "height": 780,
+        "minWidth": 860,
+        "minHeight": 620
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "app"
+    ],
+    "icon": [
+      "icons/icon.png"
+    ],
+    "resources": [
+      "../core/*"
+    ]
+  }
+}

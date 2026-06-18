@@ -1,0 +1,18 @@
+{
+  "混沌石": {
+    "resource_id": "Metadata/Items/Currency/CurrencyRerollRare",
+    "template": "混沌石 {price}"
+  },
+  "神圣石": {
+    "resource_id": "Metadata/Items/Currency/CurrencyModValues",
+    "template": "神圣石 {price}"
+  },
+  "崇高石": {
+    "resource_id": "Metadata/Items/Currency/CurrencyAddModToRare",
+    "template": "崇高石 {price}"
+  },
+  "卡兰德的魔镜": {
+    "resource_id": "Metadata/Items/Currency/CurrencyDuplicate",
+    "template": "魔镜 {price}"
+  }
+}
