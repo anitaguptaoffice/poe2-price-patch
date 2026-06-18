@@ -45,10 +45,12 @@ jobs:
         include:
           - os: windows-latest
             artifact: poe2-price-patcher-windows-x64
+            gui_artifact: poe2-price-patcher-gui-windows-x64
             exe: poe2-price-patcher.exe
             ooz: ooz.exe
           - os: macos-14
             artifact: poe2-price-patcher-macos-arm64
+            gui_artifact: poe2-price-patcher-gui-macos-arm64
             exe: poe2-price-patcher
             ooz: ooz
     runs-on: ${{ matrix.os }}
@@ -59,8 +61,16 @@ jobs:
         with:
           python-version: "3.11"
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
       - name: Install Python build dependencies
         run: python -m pip install --upgrade pip pyinstaller beautifulsoup4
+
+      - name: Install GUI dependencies
+        run: npm ci
 
       - name: Checkout PyPoE
         uses: actions/checkout@v4
@@ -116,10 +126,48 @@ jobs:
           cd release
           python -m zipfile -c "../${{ matrix.artifact }}.zip" "${{ matrix.artifact }}"
 
+      - name: Prepare GUI core
+        shell: bash
+        run: |
+          cp "dist/${{ matrix.exe }}" "core/${{ matrix.exe }}"
+          chmod +x "core/${{ matrix.exe }}" || true
+
+      - name: Build GUI
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            npm run tauri -- build
+          else
+            npm run tauri -- build -- --no-bundle
+          fi
+
+      - name: Package GUI
+        shell: bash
+        run: |
+          mkdir -p gui-release
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            cd "src-tauri/target/release/bundle/macos"
+            python -m zipfile -r "../../../../../gui-release/${{ matrix.gui_artifact }}.zip" "POE2 Price Patcher.app"
+          else
+            mkdir -p "gui-release/${{ matrix.gui_artifact }}"
+            cp "src-tauri/target/release/poe2-price-patcher-gui.exe" "gui-release/${{ matrix.gui_artifact }}/"
+            mkdir -p "gui-release/${{ matrix.gui_artifact }}/core"
+            cp "core/${{ matrix.exe }}" "gui-release/${{ matrix.gui_artifact }}/core/"
+            cp core/prices.example.json "gui-release/${{ matrix.gui_artifact }}/core/"
+            cp core/resource_map.json "gui-release/${{ matrix.gui_artifact }}/core/"
+            cd gui-release
+            python -m zipfile -c "../${{ matrix.gui_artifact }}.zip" "${{ matrix.gui_artifact }}"
+          fi
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.gui_artifact }}
+          path: ${{ matrix.gui_artifact }}.zip
 
   publish:
     needs:

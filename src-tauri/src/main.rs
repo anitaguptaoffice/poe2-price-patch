@@ -19,17 +19,67 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-fn candidate_core_script(app: &tauri::AppHandle) -> PathBuf {
+fn core_binary_name() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "poe2-price-patcher.exe"
+    } else {
+        "poe2-price-patcher"
+    }
+}
+
+fn candidate_core_binary(app: &tauri::AppHandle) -> Option<PathBuf> {
+    let name = core_binary_name();
+    let packaged = app
+        .path()
+        .resource_dir()
+        .ok()
+        .map(|p| p.join("_up_").join("core").join(name));
+    if let Some(path) = packaged.filter(|p| p.exists()) {
+        return Some(path);
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            let sibling = parent.join("core").join(name);
+            if sibling.exists() {
+                return Some(sibling);
+            }
+        }
+    }
+
+    let local = workspace_root().join("core").join(name);
+    if local.exists() {
+        return Some(local);
+    }
+
+    None
+}
+
+fn candidate_core_script(app: &tauri::AppHandle) -> Option<PathBuf> {
     let packaged = app
         .path()
         .resource_dir()
         .ok()
         .map(|p| p.join("_up_").join("core").join("build_patch.py"));
     if let Some(path) = packaged.filter(|p| p.exists()) {
-        return path;
+        return Some(path);
     }
 
-    workspace_root().join("core").join("build_patch.py")
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            let sibling = parent.join("core").join("build_patch.py");
+            if sibling.exists() {
+                return Some(sibling);
+            }
+        }
+    }
+
+    let local = workspace_root().join("core").join("build_patch.py");
+    if local.exists() {
+        return Some(local);
+    }
+
+    None
 }
 
 #[tauri::command]
@@ -88,9 +138,10 @@ fn run_patch(
     price_field: String,
     season: Option<String>,
 ) -> Result<RunResult, String> {
+    let core_binary = candidate_core_binary(&app);
     let script = candidate_core_script(&app);
-    if !script.exists() {
-        return Err(format!("找不到内核脚本: {}", script.display()));
+    if core_binary.is_none() && script.is_none() {
+        return Err("找不到补丁内核：缺少 poe2-price-patcher 或 build_patch.py".to_string());
     }
 
     let root = workspace_root();
@@ -106,7 +157,6 @@ fn run_patch(
     let ooz_dir = work_dir.join("ooz").join("build");
 
     let mut args = vec![
-        script.to_string_lossy().to_string(),
         "--bundles2".to_string(),
         bundles2,
         "--out".to_string(),
@@ -130,23 +180,42 @@ fn run_patch(
         args.push(season);
     }
 
-    let mut command = Command::new("python3");
+    let mut command = if let Some(binary) = core_binary {
+        Command::new(binary)
+    } else {
+        let script = script.expect("script checked above");
+        let mut command = Command::new("python3");
+        command.arg(script);
+        if ooz_dir.exists() {
+            command.env("PATH", prepend_path(std::env::var_os("PATH"), &ooz_dir));
+        }
+        let python_paths: Vec<PathBuf> = [pydeps, pypoe]
+            .into_iter()
+            .filter(|p| p.exists())
+            .collect();
+        if !python_paths.is_empty() {
+            command.env(
+                "PYTHONPATH",
+                prepend_pythonpath(std::env::var_os("PYTHONPATH"), &python_paths),
+            );
+        }
+        if work_dir.exists() {
+            command.env("HOME", &work_dir);
+        }
+        command
+    };
     command.args(args);
-    if ooz_dir.exists() {
-        command.env("PATH", prepend_path(std::env::var_os("PATH"), &ooz_dir));
-    }
-    let python_paths: Vec<PathBuf> = [pydeps, pypoe]
-        .into_iter()
-        .filter(|p| p.exists())
-        .collect();
-    if !python_paths.is_empty() {
-        command.env(
-            "PYTHONPATH",
-            prepend_pythonpath(std::env::var_os("PYTHONPATH"), &python_paths),
-        );
-    }
-    if work_dir.exists() {
-        command.env("HOME", &work_dir);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Some(binary) = candidate_core_binary(&app) {
+            if let Ok(metadata) = std::fs::metadata(&binary) {
+                let mut permissions = metadata.permissions();
+                permissions.set_mode(0o755);
+                let _ = std::fs::set_permissions(binary, permissions);
+            }
+        }
     }
 
     let output = command.output().map_err(|e| e.to_string())?;
