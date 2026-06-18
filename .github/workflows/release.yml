@@ -139,5 +139,6 @@ jobs:
         shell: bash
         run: |
           gh release create "${{ needs.detect.outputs.tag }}" artifacts/*.zip \
+            --repo "${{ github.repository }}" \
             --title "价格版本 ${{ needs.detect.outputs.version }}" \
             --notes "poecurrency.top 北京时间价格版本：${{ needs.detect.outputs.version }}"
