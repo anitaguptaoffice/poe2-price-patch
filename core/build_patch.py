@@ -280,32 +280,11 @@ def pick_latest_price(rows, field):
 
 
 def fetch_prices_from_api(api_base, hours, version, season, price_field, generated_map, explicit_names=None, chaos_price_label="1c", workers=8, bulk_limit=10000):
-    params = {}
-    if version:
-        params["version"] = version
-    if season:
-        params["season"] = season
-    currencies = api_get_json(api_base, "/api/db/currencies", params)
-
     fetched = {}
     skipped_unmapped = []
     no_price = []
     matched = []
     wanted = set(explicit_names or [])
-
-    fetch_targets = []
-    for item in currencies:
-        item_name = item.get("item_name")
-        category_label = item.get("category_label")
-        if not item_name or not category_label:
-            continue
-        if wanted and item_name not in wanted:
-            continue
-        if item_name not in generated_map:
-            skipped_unmapped.append(item)
-            continue
-
-        fetch_targets.append(item)
 
     price_params = {"limit": bulk_limit}
     if version:
@@ -322,9 +301,19 @@ def fetch_prices_from_api(api_base, hours, version, season, price_field, generat
             continue
         price_rows_by_item.setdefault(key, []).append(row)
 
-    for item in fetch_targets:
-        item_name = item.get("item_name")
-        category_label = item.get("category_label")
+    seen_unmapped = set()
+    seen_price_names = set()
+    for (item_name, category_label), rows in price_rows_by_item.items():
+        if wanted and item_name not in wanted:
+            continue
+        seen_price_names.add(item_name)
+        if item_name not in generated_map:
+            unmapped_key = (item_name, category_label)
+            if unmapped_key not in seen_unmapped:
+                skipped_unmapped.append({"item_name": item_name, "category_label": category_label})
+                seen_unmapped.add(unmapped_key)
+            continue
+
         rows = price_rows_by_item.get((item_name, category_label), [])
         price = pick_latest_price(rows, price_field)
         if not price:
@@ -339,7 +328,7 @@ def fetch_prices_from_api(api_base, hours, version, season, price_field, generat
                     "field": "fixed",
                 })
                 continue
-            no_price.append(item)
+            no_price.append({"item_name": item_name, "category_label": category_label})
             continue
 
         fetched[item_name] = price["label"]
@@ -354,11 +343,14 @@ def fetch_prices_from_api(api_base, hours, version, season, price_field, generat
             }
         )
 
+    for item_name in sorted(wanted - seen_price_names):
+        no_price.append({"item_name": item_name})
+
     return fetched, matched, skipped_unmapped, no_price, {
         "mode": "bulk",
         "price_rows": len(price_rows),
         "bulk_limit": bulk_limit,
-        "requests": 2,
+        "requests": 1,
     }
 
 
@@ -480,7 +472,7 @@ def main():
     parser.add_argument("--fetch-prices", action="store_true", help="Fetch prices from poecurrency.top")
     parser.add_argument("--api-base", default="https://poecurrency.top")
     parser.add_argument("--hours", type=int, default=24)
-    parser.add_argument("--version", type=int, default=None, help="POE version parameter for poecurrency.top")
+    parser.add_argument("--version", type=int, default=2, help="POE version parameter for poecurrency.top")
     parser.add_argument("--season", default=None)
     parser.add_argument("--price-field", default="sell1", choices=["sell1", "buy1", "sell2", "buy2"])
     parser.add_argument("--chaos-price-label", default="1c")

@@ -23,7 +23,7 @@ jobs:
           python-version: "3.11"
 
       - id: price
-        run: python scripts/check_price_version.py --hours 24
+        run: python scripts/check_price_version.py --hours 24 --version 2
 
       - id: release
         env:

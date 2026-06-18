@@ -62,7 +62,7 @@ def main():
     parser.add_argument("--item-name", action="append", default=None)
     parser.add_argument("--category-label", default="通货仓库")
     parser.add_argument("--hours", type=int, default=1)
-    parser.add_argument("--version", type=int, default=None)
+    parser.add_argument("--version", type=int, default=2)
     parser.add_argument("--season", default=None)
     parser.add_argument("--workers", type=int, default=6)
     args = parser.parse_args()

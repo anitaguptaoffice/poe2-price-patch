@@ -9,12 +9,11 @@ POE2 item display-name price patch builder.
 - Appends price labels to matched item names.
 - Writes a patch zip containing a rewritten `_.index.bin` and `PricePatch.bundle.bin`.
 
-Remote price fetching uses two API requests by default:
+Remote price fetching uses one API request by default:
 
-1. `/api/db/currencies`
-2. `/api/db/price?limit=10000`
+1. `/api/db/price?limit=10000&version=2`
 
-The tool then groups rows locally by `item_name` and `category_label`, and uses the latest `datetime` row for each item.
+The tool then groups rows locally by `item_name` and `category_label`, and uses the latest `datetime` row for each POE2 item.
 
 The generated patch is created locally from your own `Bundles2` files. The repository and GitHub Actions do not contain game assets.
 
@@ -49,7 +48,7 @@ Output:
 
 `.github/workflows/release.yml` runs every 10 minutes.
 
-1. `scripts/check_price_version.py` requests recent price rows with `hours=24`.
+1. `scripts/check_price_version.py` requests recent POE2 price rows with `hours=24&version=2`.
 2. It parses the latest `datetime` as Asia/Shanghai time.
 3. The tag is generated as `price-YYYYMMDD-HHMM`, for example `price-20260618-1800`.
 4. If that release already exists, the workflow exits.
