@@ -72,7 +72,9 @@ def main():
     if BASEITEMTYPES_NAME_OFFSET + 8 > record_len:
         core.fail("baseitemtypes row layout is not understood: %s" % record_len)
 
+    generated_map, map_collisions = core.extract_resource_map_from_name_table(name_table)
     resource_map = json.loads(Path(args.resource_map).read_text(encoding="utf-8"))
+    merged_map = {**generated_map, **resource_map}
     prices = {}
     fetched_matches = []
     fetch_stats = None
@@ -87,13 +89,13 @@ def main():
             args.version,
             args.season,
             args.price_field,
-            resource_map,
+            merged_map,
             chaos_price_label=args.chaos_price_label,
             bulk_limit=args.bulk_price_limit,
         )
         prices.update(fetched)
 
-    replacements, missing_map = core.build_replacements_from_prices(prices, [resource_map])
+    replacements, missing_map = core.build_replacements_from_prices(prices, [resource_map, generated_map])
     if not replacements:
         core.fail("no replacements produced")
 
@@ -168,6 +170,11 @@ def main():
         },
         "patched_rows": patched_rows,
         "missing_resource_map_names": missing_map,
+        "resource_map": {
+            "explicit_entries": len(resource_map),
+            "generated_entries": len(generated_map),
+            "collisions": map_collisions,
+        },
         "price_source": {
             "fetch_prices": args.fetch_prices,
             "api_base": args.api_base,

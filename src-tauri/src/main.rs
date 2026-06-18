@@ -55,6 +55,39 @@ fn candidate_core_binary(app: &tauri::AppHandle) -> Option<PathBuf> {
     None
 }
 
+fn candidate_oodle_dll(
+    app: &tauri::AppHandle,
+    bundles2: &str,
+    explicit: Option<String>,
+) -> Option<PathBuf> {
+    if let Some(path) = explicit
+        .filter(|p| !p.trim().is_empty())
+        .map(PathBuf::from)
+        .filter(|p| p.exists())
+    {
+        return Some(path);
+    }
+
+    let mut candidates = Vec::new();
+    if let Some(game_root) = PathBuf::from(bundles2).parent() {
+        candidates.push(game_root.join("oo2core.dll"));
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            candidates.push(parent.join("oo2core.dll"));
+            candidates.push(parent.join("core").join("oo2core.dll"));
+        }
+    }
+
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        candidates.push(resource_dir.join("_up_").join("core").join("oo2core.dll"));
+        candidates.push(resource_dir.join("oo2core.dll"));
+    }
+
+    candidates.into_iter().find(|p| p.exists())
+}
+
 fn candidate_core_script(app: &tauri::AppHandle) -> Option<PathBuf> {
     let packaged = app.path().resource_dir().ok().map(|p| {
         p.join("_up_")
@@ -100,6 +133,14 @@ fn pick_file() -> Option<String> {
 }
 
 #[tauri::command]
+fn pick_oodle_dll() -> Option<String> {
+    rfd::FileDialog::new()
+        .add_filter("Oodle DLL", &["dll"])
+        .pick_file()
+        .map(|p| p.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 fn open_directory(path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     let mut cmd = Command::new("open");
@@ -140,6 +181,7 @@ fn run_patch(
     outdir: String,
     mode: String,
     prices: Option<String>,
+    oodle_dll: Option<String>,
     price_field: String,
     season: Option<String>,
 ) -> Result<RunResult, String> {
@@ -174,13 +216,14 @@ fn run_patch(
         "12".to_string(),
     ];
 
-    let oodle_dll = PathBuf::from(&bundles2)
-        .parent()
-        .map(|p| p.join("oo2core.dll"))
-        .filter(|p| p.exists());
-    if let Some(oodle_dll) = oodle_dll {
+    if let Some(oodle_dll) = candidate_oodle_dll(&app, &bundles2, oodle_dll) {
         args.push("--oodle-dll".to_string());
         args.push(oodle_dll.to_string_lossy().to_string());
+    } else {
+        return Err(
+            "找不到 oo2core.dll：请选择游戏目录里的 oo2core.dll，或确认它在 Bundles2 上级目录。"
+                .to_string(),
+        );
     }
 
     if mode == "local" {
@@ -248,6 +291,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             pick_directory,
             pick_file,
+            pick_oodle_dll,
             open_directory,
             run_patch
         ])

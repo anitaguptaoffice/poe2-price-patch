@@ -40,10 +40,19 @@ document.querySelectorAll<HTMLButtonElement>("[data-pick-file]").forEach((button
   });
 });
 
+document.querySelectorAll<HTMLButtonElement>("[data-pick-dll]").forEach((button) => {
+  button.addEventListener("click", async () => {
+    const target = button.dataset.pickDll!;
+    const selected = await invoke<string | null>("pick_oodle_dll");
+    if (selected) $<HTMLInputElement>(target).value = selected;
+  });
+});
+
 runBtn.addEventListener("click", async () => {
   const mode = ($<HTMLSelectElement>("mode").value || "fetch") as "fetch" | "local";
   const bundles2 = value("bundles2");
   const outdir = value("outdir");
+  const oodleDll = value("oodle-dll");
   const prices = value("prices");
   if (!bundles2 || !outdir) {
     summaryEl.textContent = "请先选择 Bundles2 和输出目录。";
@@ -65,6 +74,7 @@ runBtn.addEventListener("click", async () => {
       outdir,
       mode,
       prices: prices || null,
+      oodleDll: oodleDll || null,
       priceField: ($<HTMLSelectElement>("price-field").value || "sell1"),
       season: value("season") || null,
     });
