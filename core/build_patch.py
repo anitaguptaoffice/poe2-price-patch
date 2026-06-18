@@ -63,12 +63,33 @@ def install_pypoe_decompress_patch(bundle_module):
     bundle_module.Bundle.decompress = fixed_decompress
 
 
-def compress_raw_chunk(raw, compressor):
+def compress_raw_chunk(raw, compressor, oodle_dll=None, level=4):
     with TemporaryDirectory() as tempdir:
         src = Path(tempdir) / "chunk.raw"
         dst = Path(tempdir) / "chunk.ooz"
         src.write_bytes(raw)
-        run_ooz(["-z", "--" + compressor, str(src), str(dst)])
+        if oodle_dll:
+            tool = Path(__file__).parent / "tools" / "oodle_compress.py"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(tool),
+                    "--dll",
+                    str(oodle_dll),
+                    "--compressor",
+                    compressor,
+                    "--level",
+                    str(level),
+                    str(src),
+                    str(dst),
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(result.stderr.decode(errors="replace"))
+        else:
+            run_ooz(["-z", "--" + compressor, str(src), str(dst)])
         compressed = dst.read_bytes()
 
     if struct.unpack_from("<Q", compressed, 0)[0] != len(raw):
@@ -76,7 +97,7 @@ def compress_raw_chunk(raw, compressor):
     return compressed[8:]
 
 
-def build_bundle(raw_data, output_path, encoder=9, chunk_size=262144):
+def build_bundle(raw_data, output_path, encoder=9, chunk_size=262144, oodle_dll=None, level=4):
     compressor_by_encoder = {
         9: "mermaid",
         12: "hydra",
@@ -87,7 +108,14 @@ def build_bundle(raw_data, output_path, encoder=9, chunk_size=262144):
 
     chunks = []
     for start in range(0, len(raw_data), chunk_size):
-        chunks.append(compress_raw_chunk(raw_data[start : start + chunk_size], compressor))
+        chunks.append(
+            compress_raw_chunk(
+                raw_data[start : start + chunk_size],
+                compressor,
+                oodle_dll=oodle_dll,
+                level=level,
+            )
+        )
 
     entry_count = len(chunks)
     data_size = sum(len(chunk) for chunk in chunks)
@@ -476,6 +504,9 @@ def main():
     parser.add_argument("--resource-map", default=None, help="JSON mapping source item name to resource id")
     parser.add_argument("--out", required=True, help="Output directory")
     parser.add_argument("--price-bundle-name", default="PricePatch")
+    parser.add_argument("--bundle-encoder", type=int, default=9, choices=[9, 12])
+    parser.add_argument("--oodle-dll", default=None, help="Path to oo2core DLL for Oodle compression")
+    parser.add_argument("--oodle-level", type=int, default=4)
     args = parser.parse_args()
     if not args.prices and not args.fetch_prices:
         fail("provide --prices or --fetch-prices")
@@ -534,7 +565,13 @@ def main():
     patched_table, patched_rows = patch_name_table(name_table, replacements)
 
     price_bundle_path = out_bundles / (args.price_bundle_name + ".bundle.bin")
-    build_bundle(patched_table, price_bundle_path, encoder=9)
+    build_bundle(
+        patched_table,
+        price_bundle_path,
+        encoder=args.bundle_encoder,
+        oodle_dll=args.oodle_dll,
+        level=args.oodle_level,
+    )
 
     patched_index_raw, price_bundle_id = rewrite_index_raw(
         index.data,
@@ -542,10 +579,13 @@ def main():
         args.price_bundle_name,
         len(patched_table),
     )
-    # ooz can decode Hydra in the current toolchain, but Hydra compression is
-    # not reliable here. Bundles declare their encoder in the header, so the
-    # rebuilt index is encoded as Mermaid.
-    build_bundle(patched_index_raw, out_bundles / "_.index.bin", encoder=9)
+    build_bundle(
+        patched_index_raw,
+        out_bundles / "_.index.bin",
+        encoder=args.bundle_encoder,
+        oodle_dll=args.oodle_dll,
+        level=args.oodle_level,
+    )
 
     report = {
         "name_table": {
