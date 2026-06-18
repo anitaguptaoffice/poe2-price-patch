@@ -79,7 +79,7 @@ jobs:
         shell: bash
         run: |
           cmake -S vendor/ooz -B vendor/ooz/build -DCMAKE_BUILD_TYPE=Release
-          cmake --build vendor/ooz/build --config Release
+          cmake --build vendor/ooz/build --config Release --target ooz
 
       - name: Locate ooz
         id: ooz
