@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -75,11 +76,16 @@ def main():
         "瓦尔宝珠",
     ]
 
-    def fetch_one(item_name):
+    hour_windows = []
+    for value in [args.hours, 2, 6, 24]:
+        if value not in hour_windows:
+            hour_windows.append(value)
+
+    def fetch_one(item_name, hours):
         params = {
             "item_name": item_name,
             "category_label": args.category_label,
-            "hours": args.hours,
+            "hours": hours,
         }
         if args.version:
             params["version"] = args.version
@@ -88,19 +94,27 @@ def main():
         rows = api_get_json(args.api_base, "/api/db/price", params)
         return item_name, rows
 
-    rows = []
+    candidates = []
     errors = []
-    with ThreadPoolExecutor(max_workers=max(1, args.workers)) as executor:
-        futures = [executor.submit(fetch_one, item_name) for item_name in item_names]
-        for future in as_completed(futures):
-            try:
-                _, item_rows = future.result()
-                rows.extend(item_rows)
-            except Exception as exc:
-                errors.append(str(exc))
+    for attempt in range(3):
+        rows = []
+        for hours in hour_windows:
+            with ThreadPoolExecutor(max_workers=max(1, args.workers)) as executor:
+                futures = [executor.submit(fetch_one, item_name, hours) for item_name in item_names]
+                for future in as_completed(futures):
+                    try:
+                        _, item_rows = future.result()
+                        rows.extend(item_rows)
+                    except Exception as exc:
+                        errors.append(str(exc))
+            candidates = [parse_datetime(row.get("datetime")) for row in rows if isinstance(row, dict)]
+            candidates = [dt for dt in candidates if dt]
+            if candidates:
+                break
+        if candidates:
+            break
+        time.sleep(5 * (attempt + 1))
 
-    candidates = [parse_datetime(row.get("datetime")) for row in rows if isinstance(row, dict)]
-    candidates = [dt for dt in candidates if dt]
     if not candidates:
         detail = "; ".join(errors[:3])
         raise SystemExit("ERROR: no price datetime found" + (": " + detail if detail else ""))
