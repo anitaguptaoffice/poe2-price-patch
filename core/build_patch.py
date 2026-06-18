@@ -265,12 +265,7 @@ def pick_latest_price(rows, field):
         return None
     rows = sorted(rows, key=lambda r: r.get("datetime", ""))
     latest = rows[-1]
-    value = latest.get(field)
-    label = format_price_label(value)
-    if label is None and field != "sell1":
-        label = format_price_label(latest.get("sell1"))
-    if label is None:
-        label = format_price_label(latest.get("buy1"))
+    label = format_price_label(latest.get(field))
     if label is None:
         return None
     return {
