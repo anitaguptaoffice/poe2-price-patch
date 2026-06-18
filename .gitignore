@@ -12,3 +12,5 @@ build/
 __pycache__/
 .pycache/
 *.spec
+core/poe2-price-patcher
+core/poe2-price-patcher.exe
