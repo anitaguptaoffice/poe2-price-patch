@@ -494,6 +494,11 @@ def rewrite_index_raw(index_raw, target_hash, price_bundle_name, price_bundle_si
 
 
 def main():
+    from build_baseitemtypes_patch import main as fixed_baseitemtypes_main
+
+    fixed_baseitemtypes_main()
+    return
+
     parser = argparse.ArgumentParser(description="Build a POE2 item display-name price patch.")
     parser.add_argument("--bundles2", required=True, help="Path to Bundles2 directory")
     parser.add_argument("--prices", default=None, help="JSON mapping source item name to price label")

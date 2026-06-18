@@ -18,7 +18,15 @@ BASEITEMTYPES_NAME_OFFSET = 32
 def main():
     parser = argparse.ArgumentParser(description="Build a POE2 base item display-name price patch.")
     parser.add_argument("--bundles2", required=True, help="Path to Bundles2 directory")
-    parser.add_argument("--prices", required=True, help="JSON mapping source item name to price label")
+    parser.add_argument("--prices", default=None, help="JSON mapping source item name to price label")
+    parser.add_argument("--fetch-prices", action="store_true", help="Fetch prices from poecurrency.top")
+    parser.add_argument("--api-base", default="https://poecurrency.top")
+    parser.add_argument("--hours", type=int, default=24)
+    parser.add_argument("--version", type=int, default=2, help="POE version parameter for poecurrency.top")
+    parser.add_argument("--season", default=None)
+    parser.add_argument("--price-field", default="sell1", choices=["sell1", "buy1", "sell2", "buy2"])
+    parser.add_argument("--chaos-price-label", default="1c")
+    parser.add_argument("--bulk-price-limit", type=int, default=10000)
     parser.add_argument("--resource-map", default=str(Path(__file__).with_name("resource_map.json")))
     parser.add_argument("--out", required=True, help="Output directory")
     parser.add_argument("--price-bundle-name", default="PricePatch")
@@ -27,6 +35,8 @@ def main():
     parser.add_argument("--oodle-level", type=int, default=4)
     args = parser.parse_args()
 
+    if not args.prices and not args.fetch_prices:
+        core.fail("provide --prices or --fetch-prices")
     if args.bundle_encoder == 12 and not args.oodle_dll:
         core.fail("Hydra output requires --oodle-dll")
 
@@ -62,8 +72,27 @@ def main():
     if BASEITEMTYPES_NAME_OFFSET + 8 > record_len:
         core.fail("baseitemtypes row layout is not understood: %s" % record_len)
 
-    prices = json.loads(Path(args.prices).read_text(encoding="utf-8"))
     resource_map = json.loads(Path(args.resource_map).read_text(encoding="utf-8"))
+    prices = {}
+    fetched_matches = []
+    fetch_stats = None
+    skipped_unmapped = []
+    no_price = []
+    if args.prices:
+        prices.update(json.loads(Path(args.prices).read_text(encoding="utf-8")))
+    if args.fetch_prices:
+        fetched, fetched_matches, skipped_unmapped, no_price, fetch_stats = core.fetch_prices_from_api(
+            args.api_base,
+            args.hours,
+            args.version,
+            args.season,
+            args.price_field,
+            resource_map,
+            chaos_price_label=args.chaos_price_label,
+            bulk_limit=args.bulk_price_limit,
+        )
+        prices.update(fetched)
+
     replacements, missing_map = core.build_replacements_from_prices(prices, [resource_map])
     if not replacements:
         core.fail("no replacements produced")
@@ -139,6 +168,21 @@ def main():
         },
         "patched_rows": patched_rows,
         "missing_resource_map_names": missing_map,
+        "price_source": {
+            "fetch_prices": args.fetch_prices,
+            "api_base": args.api_base,
+            "hours": args.hours,
+            "version": args.version,
+            "season": args.season,
+            "price_field": args.price_field,
+            "chaos_price_label": args.chaos_price_label,
+            "bulk_price_limit": args.bulk_price_limit,
+            "fetch_stats": fetch_stats,
+            "local_prices": args.prices,
+        },
+        "fetched_matches": fetched_matches,
+        "skipped_unmapped_api_items": skipped_unmapped,
+        "no_price_items": no_price,
     }
     (out / "patch-report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 

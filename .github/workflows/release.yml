@@ -115,7 +115,7 @@ jobs:
             --exclude-module setuptools \
             --add-data "core/resource_map.json:." \
             --add-binary "${{ steps.ooz.outputs.path }}:." \
-            core/build_patch.py
+            core/build_baseitemtypes_patch.py
 
       - name: Prepare GUI core
         shell: bash

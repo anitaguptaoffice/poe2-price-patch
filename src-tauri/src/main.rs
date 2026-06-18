@@ -56,25 +56,27 @@ fn candidate_core_binary(app: &tauri::AppHandle) -> Option<PathBuf> {
 }
 
 fn candidate_core_script(app: &tauri::AppHandle) -> Option<PathBuf> {
-    let packaged = app
-        .path()
-        .resource_dir()
-        .ok()
-        .map(|p| p.join("_up_").join("core").join("build_patch.py"));
+    let packaged = app.path().resource_dir().ok().map(|p| {
+        p.join("_up_")
+            .join("core")
+            .join("build_baseitemtypes_patch.py")
+    });
     if let Some(path) = packaged.filter(|p| p.exists()) {
         return Some(path);
     }
 
     if let Ok(exe) = std::env::current_exe() {
         if let Some(parent) = exe.parent() {
-            let sibling = parent.join("core").join("build_patch.py");
+            let sibling = parent.join("core").join("build_baseitemtypes_patch.py");
             if sibling.exists() {
                 return Some(sibling);
             }
         }
     }
 
-    let local = workspace_root().join("core").join("build_patch.py");
+    let local = workspace_root()
+        .join("core")
+        .join("build_baseitemtypes_patch.py");
     if local.exists() {
         return Some(local);
     }
@@ -119,7 +121,10 @@ fn prepend_path(current: Option<std::ffi::OsString>, prefix: &Path) -> std::ffi:
     std::env::join_paths(paths).unwrap_or_default()
 }
 
-fn prepend_pythonpath(current: Option<std::ffi::OsString>, paths: &[PathBuf]) -> std::ffi::OsString {
+fn prepend_pythonpath(
+    current: Option<std::ffi::OsString>,
+    paths: &[PathBuf],
+) -> std::ffi::OsString {
     let mut merged = paths.to_vec();
     if let Some(current) = current {
         merged.extend(std::env::split_paths(&current));
@@ -158,14 +163,25 @@ fn run_patch(
 
     let mut args = vec![
         "--bundles2".to_string(),
-        bundles2,
+        bundles2.clone(),
         "--out".to_string(),
         outdir.clone(),
         "--hours".to_string(),
         "24".to_string(),
         "--price-field".to_string(),
         price_field,
+        "--bundle-encoder".to_string(),
+        "12".to_string(),
     ];
+
+    let oodle_dll = PathBuf::from(&bundles2)
+        .parent()
+        .map(|p| p.join("oo2core.dll"))
+        .filter(|p| p.exists());
+    if let Some(oodle_dll) = oodle_dll {
+        args.push("--oodle-dll".to_string());
+        args.push(oodle_dll.to_string_lossy().to_string());
+    }
 
     if mode == "local" {
         let prices = prices.ok_or_else(|| "本地模式缺少 prices.json".to_string())?;
@@ -189,10 +205,8 @@ fn run_patch(
         if ooz_dir.exists() {
             command.env("PATH", prepend_path(std::env::var_os("PATH"), &ooz_dir));
         }
-        let python_paths: Vec<PathBuf> = [pydeps, pypoe]
-            .into_iter()
-            .filter(|p| p.exists())
-            .collect();
+        let python_paths: Vec<PathBuf> =
+            [pydeps, pypoe].into_iter().filter(|p| p.exists()).collect();
         if !python_paths.is_empty() {
             command.env(
                 "PYTHONPATH",
