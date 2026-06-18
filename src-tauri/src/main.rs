@@ -86,7 +86,6 @@ fn run_patch(
     mode: String,
     prices: Option<String>,
     price_field: String,
-    workers: u32,
     season: Option<String>,
 ) -> Result<RunResult, String> {
     let script = candidate_core_script(&app);
@@ -116,8 +115,6 @@ fn run_patch(
         "24".to_string(),
         "--price-field".to_string(),
         price_field,
-        "--fetch-workers".to_string(),
-        workers.to_string(),
     ];
 
     if mode == "local" {

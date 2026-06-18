@@ -66,7 +66,6 @@ runBtn.addEventListener("click", async () => {
       mode,
       prices: prices || null,
       priceField: ($<HTMLSelectElement>("price-field").value || "sell1"),
-      workers: Number(value("workers") || "8"),
       season: value("season") || null,
     });
     setLog([result.stdout, result.stderr].filter(Boolean).join("\n\n"));

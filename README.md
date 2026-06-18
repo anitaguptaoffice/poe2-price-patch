@@ -9,6 +9,13 @@ POE2 item display-name price patch builder.
 - Appends price labels to matched item names.
 - Writes a patch zip containing a rewritten `_.index.bin` and `PricePatch.bundle.bin`.
 
+Remote price fetching uses two API requests by default:
+
+1. `/api/db/currencies`
+2. `/api/db/price?limit=10000`
+
+The tool then groups rows locally by `item_name` and `category_label`, and uses the latest `datetime` row for each item.
+
 The generated patch is created locally from your own `Bundles2` files. The repository and GitHub Actions do not contain game assets.
 
 ## CLI usage

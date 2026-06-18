@@ -279,7 +279,7 @@ def pick_latest_price(rows, field):
     }
 
 
-def fetch_prices_from_api(api_base, hours, version, season, price_field, generated_map, explicit_names=None, chaos_price_label="1c", workers=8):
+def fetch_prices_from_api(api_base, hours, version, season, price_field, generated_map, explicit_names=None, chaos_price_label="1c", workers=8, bulk_limit=10000):
     params = {}
     if version:
         params["version"] = version
@@ -307,29 +307,30 @@ def fetch_prices_from_api(api_base, hours, version, season, price_field, generat
 
         fetch_targets.append(item)
 
-    def fetch_one(item):
+    price_params = {"limit": bulk_limit}
+    if version:
+        price_params["version"] = version
+    if season:
+        price_params["season"] = season
+    price_rows = api_get_json(api_base, "/api/db/price", price_params)
+    price_rows_by_item = {}
+    for row in price_rows:
+        if not isinstance(row, dict):
+            continue
+        key = (row.get("item_name"), row.get("category_label"))
+        if not key[0] or not key[1]:
+            continue
+        price_rows_by_item.setdefault(key, []).append(row)
+
+    for item in fetch_targets:
         item_name = item.get("item_name")
         category_label = item.get("category_label")
-        price_params = {
-            "item_name": item_name,
-            "category_label": category_label,
-            "hours": hours,
-        }
-        if version:
-            price_params["version"] = version
-        if season:
-            price_params["season"] = season
-
-        try:
-            rows = api_get_json(api_base, "/api/db/price", price_params)
-        except Exception as e:
-            item = dict(item)
-            item["error"] = str(e)
-            return ("no_price", item)
+        rows = price_rows_by_item.get((item_name, category_label), [])
         price = pick_latest_price(rows, price_field)
         if not price:
             if item_name == "混沌石" and chaos_price_label:
-                return ("matched", item_name, chaos_price_label, {
+                fetched[item_name] = chaos_price_label
+                matched.append({
                     "item_name": item_name,
                     "category_label": category_label,
                     "resource_id": generated_map[item_name]["resource_id"],
@@ -337,9 +338,12 @@ def fetch_prices_from_api(api_base, hours, version, season, price_field, generat
                     "datetime": None,
                     "field": "fixed",
                 })
-            return ("no_price", item)
+                continue
+            no_price.append(item)
+            continue
 
-        return ("matched", item_name, price["label"],
+        fetched[item_name] = price["label"]
+        matched.append(
             {
                 "item_name": item_name,
                 "category_label": category_label,
@@ -350,18 +354,12 @@ def fetch_prices_from_api(api_base, hours, version, season, price_field, generat
             }
         )
 
-    with ThreadPoolExecutor(max_workers=max(1, workers)) as executor:
-        futures = [executor.submit(fetch_one, item) for item in fetch_targets]
-        for future in as_completed(futures):
-            result = future.result()
-            if result[0] == "matched":
-                _, item_name, label, info = result
-                fetched[item_name] = label
-                matched.append(info)
-            elif result[0] == "no_price":
-                no_price.append(result[1])
-
-    return fetched, matched, skipped_unmapped, no_price
+    return fetched, matched, skipped_unmapped, no_price, {
+        "mode": "bulk",
+        "price_rows": len(price_rows),
+        "bulk_limit": bulk_limit,
+        "requests": 2,
+    }
 
 
 def build_replacements_from_prices(prices, resource_maps):
@@ -486,7 +484,8 @@ def main():
     parser.add_argument("--season", default=None)
     parser.add_argument("--price-field", default="sell1", choices=["sell1", "buy1", "sell2", "buy2"])
     parser.add_argument("--chaos-price-label", default="1c")
-    parser.add_argument("--fetch-workers", type=int, default=8)
+    parser.add_argument("--fetch-workers", type=int, default=8, help="Deprecated; bulk price fetch does not use workers")
+    parser.add_argument("--bulk-price-limit", type=int, default=10000)
     parser.add_argument("--resource-map", default=None, help="JSON mapping source item name to resource id")
     parser.add_argument("--out", required=True, help="Output directory")
     parser.add_argument("--price-bundle-name", default="PricePatch")
@@ -518,6 +517,7 @@ def main():
             explicit_map = json.loads(default_map.read_text(encoding="utf-8"))
 
     fetched_matches = []
+    fetch_stats = None
     skipped_unmapped = []
     no_price = []
     prices = {}
@@ -525,7 +525,7 @@ def main():
         prices.update(json.loads(Path(args.prices).read_text(encoding="utf-8")))
     if args.fetch_prices:
         explicit_names = set(explicit_map.keys()) if args.resource_map and explicit_map else None
-        fetched, fetched_matches, skipped_unmapped, no_price = fetch_prices_from_api(
+        fetched, fetched_matches, skipped_unmapped, no_price, fetch_stats = fetch_prices_from_api(
             args.api_base,
             args.hours,
             args.version,
@@ -535,6 +535,7 @@ def main():
             explicit_names=explicit_names,
             chaos_price_label=args.chaos_price_label,
             workers=args.fetch_workers,
+            bulk_limit=args.bulk_price_limit,
         )
         prices.update(fetched)
 
@@ -580,7 +581,8 @@ def main():
             "season": args.season,
             "price_field": args.price_field,
             "chaos_price_label": args.chaos_price_label,
-            "fetch_workers": args.fetch_workers,
+            "bulk_price_limit": args.bulk_price_limit,
+            "fetch_stats": fetch_stats,
             "local_prices": args.prices,
         },
         "fetched_matches": fetched_matches,

@@ -1,7 +1,7 @@
 node_modules/
 dist/
 src-tauri/target/
-test_output/
+test_output*/
 *.log
 .DS_Store
 *.zip
