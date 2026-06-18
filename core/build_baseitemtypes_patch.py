@@ -20,6 +20,7 @@ def main():
     parser.add_argument("--bundles2", required=True, help="Path to Bundles2 directory")
     parser.add_argument("--prices", default=None, help="JSON mapping source item name to price label")
     parser.add_argument("--fetch-prices", action="store_true", help="Fetch prices from poecurrency.top")
+    parser.add_argument("--price-source", default="poecurrency", choices=["poecurrency", "ninja"])
     parser.add_argument("--api-base", default="https://poecurrency.top")
     parser.add_argument("--hours", type=int, default=24)
     parser.add_argument("--version", type=int, default=2, help="POE version parameter for poecurrency.top")
@@ -28,6 +29,13 @@ def main():
     parser.add_argument("--chaos-price-label", default="1c")
     parser.add_argument("--bulk-price-limit", type=int, default=10000)
     parser.add_argument("--resource-map", default=str(Path(__file__).with_name("resource_map.json")))
+    parser.add_argument("--ninja-map", default=str(Path(__file__).with_name("poe_ninja_currency_map.json")))
+    parser.add_argument("--ninja-league", default="Standard")
+    parser.add_argument("--ninja-type", default="Currency")
+    parser.add_argument("--ninja-types", default=None, help="Comma-separated poe.ninja types; overrides --ninja-type")
+    parser.add_argument("--min-chaos-price", type=float, default=1.0)
+    parser.add_argument("--ninja-cache-dir", default=None)
+    parser.add_argument("--ninja-cache-ttl", type=int, default=21600)
     parser.add_argument("--out", required=True, help="Output directory")
     parser.add_argument("--price-bundle-name", default="PricePatch")
     parser.add_argument("--bundle-encoder", type=int, default=12, choices=[9, 12])
@@ -75,7 +83,9 @@ def main():
     generated_map, map_collisions = core.extract_resource_map_from_name_table(name_table)
     resource_map = json.loads(Path(args.resource_map).read_text(encoding="utf-8"))
     merged_map = {**generated_map, **resource_map}
+    resource_id_map = {item["resource_id"]: item for item in generated_map.values()}
     prices = {}
+    resource_prices = {}
     fetched_matches = []
     fetch_stats = None
     skipped_unmapped = []
@@ -83,19 +93,43 @@ def main():
     if args.prices:
         prices.update(json.loads(Path(args.prices).read_text(encoding="utf-8")))
     if args.fetch_prices:
-        fetched, fetched_matches, skipped_unmapped, no_price, fetch_stats = core.fetch_prices_from_api(
-            args.api_base,
-            args.hours,
-            args.version,
-            args.season,
-            args.price_field,
-            merged_map,
-            chaos_price_label=args.chaos_price_label,
-            bulk_limit=args.bulk_price_limit,
-        )
-        prices.update(fetched)
+        if args.price_source == "ninja":
+            ninja_map = json.loads(Path(args.ninja_map).read_text(encoding="utf-8"))
+            ninja_cache_dir = args.ninja_cache_dir or str(out / "cache")
+            ninja_types = [part.strip() for part in (args.ninja_types or args.ninja_type).split(",") if part.strip()]
+            fetch_stats = []
+            for ninja_type in ninja_types:
+                type_resource_prices, type_matches, type_skipped, type_no_price, type_stats = core.fetch_prices_from_poe_ninja(
+                    args.ninja_league,
+                    ninja_type,
+                    ninja_map,
+                    resource_id_map,
+                    min_chaos_price=args.min_chaos_price,
+                    cache_dir=ninja_cache_dir,
+                    cache_ttl_seconds=args.ninja_cache_ttl,
+                )
+                resource_prices.update(type_resource_prices)
+                fetched_matches.extend(type_matches)
+                skipped_unmapped.extend(type_skipped)
+                no_price.extend(type_no_price)
+                fetch_stats.append(type_stats)
+        else:
+            fetched, fetched_matches, skipped_unmapped, no_price, fetch_stats = core.fetch_prices_from_api(
+                args.api_base,
+                args.hours,
+                args.version,
+                args.season,
+                args.price_field,
+                merged_map,
+                chaos_price_label=args.chaos_price_label,
+                bulk_limit=args.bulk_price_limit,
+            )
+            prices.update(fetched)
 
     replacements, missing_map = core.build_replacements_from_prices(prices, [resource_map, generated_map])
+    for resource_id, price in resource_prices.items():
+        item = resource_id_map[resource_id]
+        replacements[resource_id] = item.get("template", "%s {price}" % item["source_value"]).format(price=price)
     if not replacements:
         core.fail("no replacements produced")
 
@@ -182,8 +216,15 @@ def main():
             "version": args.version,
             "season": args.season,
             "price_field": args.price_field,
+            "price_source": args.price_source,
             "chaos_price_label": args.chaos_price_label,
             "bulk_price_limit": args.bulk_price_limit,
+            "ninja_league": args.ninja_league,
+            "ninja_type": args.ninja_type,
+            "ninja_types": args.ninja_types,
+            "min_chaos_price": args.min_chaos_price,
+            "ninja_cache_dir": args.ninja_cache_dir or "out/cache",
+            "ninja_cache_ttl": args.ninja_cache_ttl,
             "fetch_stats": fetch_stats,
             "local_prices": args.prices,
         },

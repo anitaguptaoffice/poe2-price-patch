@@ -8,6 +8,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import time
 import urllib.parse
 import urllib.request
 import zipfile
@@ -286,6 +287,8 @@ def format_price_label(value):
     if value >= 10000:
         text = "%.1fw" % (value / 10000.0)
         return text.replace(".0w", "w")
+    if value < 0.01:
+        return ("%.4fc" % value).rstrip("0").replace(".c", "c")
     if value < 1:
         return ("%.2fc" % value).rstrip("0").replace(".c", "c")
     if value == int(value):
@@ -379,6 +382,122 @@ def fetch_prices_from_api(api_base, hours, version, season, price_field, generat
         "price_rows": len(price_rows),
         "bulk_limit": bulk_limit,
         "requests": 1,
+    }
+
+
+def fetch_poe_ninja_overview(league, item_type, cache_dir=None, cache_ttl_seconds=21600):
+    cache_path = None
+    if cache_dir:
+        safe_league = re.sub(r"[^A-Za-z0-9_.-]+", "_", league).strip("_")
+        safe_type = re.sub(r"[^A-Za-z0-9_.-]+", "_", item_type).strip("_")
+        cache_path = Path(cache_dir) / ("poe-ninja-%s-%s.json" % (safe_league, safe_type))
+        if cache_path.exists():
+            age = time.time() - cache_path.stat().st_mtime
+            if cache_ttl_seconds <= 0 or age <= cache_ttl_seconds:
+                return json.loads(cache_path.read_text(encoding="utf-8")), {
+                    "url": None,
+                    "cache_path": str(cache_path),
+                    "cache_hit": True,
+                    "cache_age_seconds": age,
+                }
+
+    url = "https://poe.ninja/poe2/api/economy/exchange/current/overview"
+    params = {
+        "league": league,
+        "type": item_type,
+    }
+    full_url = url + "?" + urllib.parse.urlencode(params)
+    request = urllib.request.Request(
+        full_url,
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "poe2-price-patcher/0.1",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+
+    if cache_path:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return payload, {
+        "url": full_url,
+        "cache_path": str(cache_path) if cache_path else None,
+        "cache_hit": False,
+        "cache_age_seconds": 0,
+    }
+
+
+def fetch_prices_from_poe_ninja(league, item_type, ninja_map, resource_id_map, min_chaos_price=1.0, cache_dir=None, cache_ttl_seconds=21600):
+    payload, request_stats = fetch_poe_ninja_overview(
+        league,
+        item_type,
+        cache_dir=cache_dir,
+        cache_ttl_seconds=cache_ttl_seconds,
+    )
+
+    core_data = payload.get("core", {})
+    rates = core_data.get("rates", {})
+    primary = core_data.get("primary")
+    secondary = core_data.get("secondary")
+    chaos_per_primary = None
+    if primary == "chaos":
+        chaos_per_primary = 1
+    elif secondary == "chaos":
+        chaos_per_primary = rates.get("chaos")
+    if not chaos_per_primary:
+        fail("poe.ninja response does not include a chaos conversion rate")
+
+    items_by_id = {item.get("id"): item for item in payload.get("items", []) if item.get("id")}
+    resource_prices = {}
+    matched = []
+    skipped_unmapped = []
+    no_price = []
+    for line in payload.get("lines", []):
+        ninja_id = line.get("id")
+        resource_id = ninja_map.get(ninja_id)
+        item = items_by_id.get(ninja_id, {})
+        if not resource_id:
+            skipped_unmapped.append({"ninja_id": ninja_id, "name": item.get("name")})
+            continue
+        if resource_id not in resource_id_map:
+            skipped_unmapped.append({"ninja_id": ninja_id, "name": item.get("name"), "resource_id": resource_id})
+            continue
+        chaos_value = line.get("primaryValue")
+        if chaos_value is None:
+            no_price.append({"ninja_id": ninja_id, "name": item.get("name")})
+            continue
+        chaos_price = float(chaos_value) * float(chaos_per_primary)
+        if chaos_price < min_chaos_price:
+            continue
+        label = format_price_label(chaos_price)
+        if not label:
+            no_price.append({"ninja_id": ninja_id, "name": item.get("name")})
+            continue
+        resource_prices[resource_id] = label
+        matched.append(
+            {
+                "ninja_id": ninja_id,
+                "name": item.get("name"),
+                "resource_id": resource_id,
+                "price": label,
+                "chaos_price": chaos_price,
+                "primary_value": chaos_value,
+            }
+        )
+
+    return resource_prices, matched, skipped_unmapped, no_price, {
+        "mode": "poe.ninja",
+        "league": league,
+        "type": item_type,
+        "primary": primary,
+        "secondary": secondary,
+        "chaos_per_primary": chaos_per_primary,
+        "min_chaos_price": min_chaos_price,
+        "items": len(payload.get("items", [])),
+        "lines": len(payload.get("lines", [])),
+        "request": request_stats,
     }
 
 
