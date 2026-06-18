@@ -119,14 +119,19 @@ def build_bundle(raw_data, output_path, encoder=9, chunk_size=262144, oodle_dll=
 
     entry_count = len(chunks)
     data_size = sum(len(chunk) for chunk in chunks)
-    head_size = 12 + 48 + entry_count * 4
+    if encoder == 12:
+        header_unknown = 1
+        head_size = 12 + 48 + max(0, entry_count - 3) * 4
+    else:
+        header_unknown = 0
+        head_size = 12 + 48 + entry_count * 4
 
     header = bytearray()
     header += struct.pack("<III", len(raw_data), data_size, head_size)
     header += struct.pack(
         "<IIQQIIIIII",
         encoder,
-        0,
+        header_unknown,
         len(raw_data),
         data_size,
         entry_count,
