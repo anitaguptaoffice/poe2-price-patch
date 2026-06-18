@@ -17,7 +17,7 @@ The generated patch is created locally from your own `Bundles2` files. The repos
 poe2-price-patcher \
   --bundles2 "D:/Path/To/Bundles2" \
   --fetch-prices \
-  --hours 1 \
+  --hours 24 \
   --price-field sell1 \
   --out out
 ```
@@ -42,7 +42,7 @@ Output:
 
 `.github/workflows/release.yml` runs every 10 minutes.
 
-1. `scripts/check_price_version.py` requests the latest `混沌石` price row with `hours=1`.
+1. `scripts/check_price_version.py` requests recent price rows with `hours=24`.
 2. It parses the latest `datetime` as Asia/Shanghai time.
 3. The tag is generated as `price-YYYYMMDD-HHMM`, for example `price-20260618-1800`.
 4. If that release already exists, the workflow exits.

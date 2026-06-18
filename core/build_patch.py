@@ -481,7 +481,7 @@ def main():
     parser.add_argument("--prices", default=None, help="JSON mapping source item name to price label")
     parser.add_argument("--fetch-prices", action="store_true", help="Fetch prices from poecurrency.top")
     parser.add_argument("--api-base", default="https://poecurrency.top")
-    parser.add_argument("--hours", type=int, default=1)
+    parser.add_argument("--hours", type=int, default=24)
     parser.add_argument("--version", type=int, default=None, help="POE version parameter for poecurrency.top")
     parser.add_argument("--season", default=None)
     parser.add_argument("--price-field", default="sell1", choices=["sell1", "buy1", "sell2", "buy2"])

@@ -65,7 +65,6 @@ runBtn.addEventListener("click", async () => {
       outdir,
       mode,
       prices: prices || null,
-      hours: Number(value("hours") || "1"),
       priceField: ($<HTMLSelectElement>("price-field").value || "sell1"),
       workers: Number(value("workers") || "8"),
       season: value("season") || null,
