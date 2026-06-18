@@ -147,7 +147,7 @@ jobs:
           mkdir -p gui-release
           if [ "${{ runner.os }}" = "macOS" ]; then
             cd "src-tauri/target/release/bundle/macos"
-            ditto -c -k --sequesterRsrc --keepParent "POE2 Price Patcher.app" "../../../../../gui-release/${{ matrix.gui_artifact }}.zip"
+            ditto -c -k --sequesterRsrc --keepParent "POE2 Price Patcher.app" "../../../../../${{ matrix.gui_artifact }}.zip"
           else
             mkdir -p "gui-release/${{ matrix.gui_artifact }}"
             cp "src-tauri/target/release/poe2-price-patcher-gui.exe" "gui-release/${{ matrix.gui_artifact }}/"
