@@ -139,11 +139,7 @@ jobs:
       - name: Build GUI
         shell: bash
         run: |
-          if [ "${{ runner.os }}" = "macOS" ]; then
-            npm run tauri -- build
-          else
-            npm run tauri -- build -- --no-bundle
-          fi
+          npm run tauri -- build
 
       - name: Package GUI
         shell: bash
@@ -151,7 +147,7 @@ jobs:
           mkdir -p gui-release
           if [ "${{ runner.os }}" = "macOS" ]; then
             cd "src-tauri/target/release/bundle/macos"
-            python -m zipfile -r "../../../../../gui-release/${{ matrix.gui_artifact }}.zip" "POE2 Price Patcher.app"
+            ditto -c -k --sequesterRsrc --keepParent "POE2 Price Patcher.app" "../../../../../gui-release/${{ matrix.gui_artifact }}.zip"
           else
             mkdir -p "gui-release/${{ matrix.gui_artifact }}"
             cp "src-tauri/target/release/poe2-price-patcher-gui.exe" "gui-release/${{ matrix.gui_artifact }}/"
